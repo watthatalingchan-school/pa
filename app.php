@@ -133,14 +133,27 @@ const linkBtn=(l)=>l?`<a href="${esc(l)}" target="_blank" class="inline-flex ite
 
 /* ================= MENU ================= */
 const MENUS={
+
  admin:[['dashboard','แดชบอร์ด','fa-chart-pie'],['school','ข้อมูลโรงเรียน','fa-school'],
+
         ['users','จัดการผู้ใช้งาน','fa-users-gear'],['years','จัดการปีงบประมาณ','fa-calendar-days'],
-        ['summary','สรุปผลการส่งเอกสาร','fa-clipboard-list']],
+
+        ['summary','สรุปผลการส่งเอกสาร','fa-clipboard-list'],
+
+        ['line','ตั้งค่าแจ้งเตือน LINE','fa-comment-dots']],
+
  director:[['dashboard','แดชบอร์ด','fa-chart-pie'],['profile','ข้อมูลส่วนตัว','fa-user-pen'],
+
         ['rv_pa1','ตรวจแบบข้อตกลง PA1','fa-file-signature'],['rv_annual','ตรวจแบบรายงานสิ้นปี','fa-file-invoice'],
-        ['rv_present','ตรวจไฟล์นำเสนอ','fa-file-powerpoint']],
+
+        ['rv_present','ตรวจไฟล์นำเสนอ','fa-file-powerpoint'],
+
+        ['summary','รายงานสรุป / Export','fa-file-export']],
+
  user:[['dashboard','แดชบอร์ด','fa-chart-pie'],['profile','ข้อมูลส่วนตัว','fa-user-pen'],
+
         ['submit','ส่งงานเอกสาร','fa-cloud-arrow-up']]
+
 };
 function buildMenu(){
   const list = ME.role==='admin'?MENUS.admin : ME.role==='director'?MENUS.director : MENUS.user;
@@ -154,7 +167,8 @@ const TITLES={dashboard:['แดชบอร์ด','ภาพรวมระบ
  users:['จัดการผู้ใช้งาน','เพิ่ม ลบ แก้ไขผู้ใช้งานระบบ'],years:['จัดการปีงบประมาณ','กำหนดปีงบประมาณปัจจุบัน'],
  summary:['สรุปผลการส่งเอกสาร','ภาพรวมการส่งเอกสารรายบุคคล'],profile:['ข้อมูลส่วนตัว','แก้ไขข้อมูลบัญชีของคุณ'],
  submit:['ส่งงานเอกสาร','อัปโหลดเอกสารและแนบลิงก์'],rv_pa1:['ตรวจแบบข้อตกลง PA1','ตรวจสอบและให้ผลการตรวจ'],
- rv_annual:['ตรวจแบบรายงานสิ้นปี','ตรวจสอบและให้ผลการตรวจ'],rv_present:['ตรวจไฟล์นำเสนอ','ตรวจสอบและให้ผลการตรวจ']};
+ rv_annual:['ตรวจแบบรายงานสิ้นปี','ตรวจสอบและให้ผลการตรวจ'],rv_present:['ตรวจไฟล์นำเสนอ','ตรวจสอบและให้ผลการตรวจ']line:['ตั้งค่าแจ้งเตือน LINE','เชื่อมต่อ LINE Messaging API'],
+};
 
 async function route(){
   let p = location.hash.replace('#','') || 'dashboard';
@@ -167,6 +181,8 @@ async function route(){
   ({dashboard:pageDashboard,school:pageSchool,users:pageUsers,years:pageYears,summary:pageSummary,
     profile:pageProfile,submit:pageSubmit,rv_pa1:()=>pageReview('pa1'),rv_annual:()=>pageReview('annual'),
     rv_present:()=>pageReview('present')})[p]();
+    rv_present:()=>pageReview('present'), line:pageLine)[p]();
+
 }
 window.addEventListener('hashchange',route);
 
@@ -414,13 +430,34 @@ async function pageSummary(){
   $('#content').innerHTML = skTable();
   const yr = await api('years',null,true);
   $('#content').innerHTML = `
-   <div class="bg-white rounded-2xl p-4 shadow-sm ring-1 ring-black/5 mb-5 flex items-center gap-3 fade">
+   <div class="bg-white rounded-2xl p-4 shadow-sm ring-1 ring-black/5 mb-5 flex flex-wrap items-center gap-3 fade">
      <label class="text-sm font-medium text-gray-600"><i class="fa-solid fa-filter text-primary"></i> ปีงบประมาณ</label>
      <select id="sy" class="px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 outline-none focus:border-primary text-sm">
        ${yr.data.map(y=>`<option value="${y.id}" ${y.id==yr.current?'selected':''}>ปี ${esc(y.year_name)}</option>`).join('')}
-     </select></div>
+     </select>
+     <div class="flex gap-2 ml-auto">
+       <button onclick="exportFile('excel')" class="px-4 py-2.5 rounded-xl bg-[#26A69A] text-white text-sm font-semibold shadow-lg shadow-[#26A69A]/25 hover:opacity-90 transition">
+         <i class="fa-solid fa-file-excel"></i> Export Excel</button>
+       <button onclick="exportFile('pdf')" class="px-4 py-2.5 rounded-xl bg-[#D32F2F] text-white text-sm font-semibold shadow-lg shadow-[#D32F2F]/25 hover:opacity-90 transition">
+         <i class="fa-solid fa-file-pdf"></i> Export PDF</button>
+     </div>
+   </div>
    <div id="sList"></div>`;
   $('#sy').onchange = loadSummary; loadSummary();
+}
+
+function exportFile(t){
+  const y = $('#sy').value;
+  if(t==='excel'){
+    loader(true);
+    location.href = `export.php?type=excel&year_id=${y}`;
+    setTimeout(()=>{loader(false); toast('success','กำลังดาวน์โหลดไฟล์ Excel');}, 1200);
+  } else {
+    Swal.fire({icon:'info',title:'พิมพ์เป็น PDF',
+      html:'ระบบจะเปิดหน้ารายงาน<br>กดปุ่ม <b>บันทึกเป็น PDF</b> แล้วเลือกปลายทาง <b>Save as PDF</b>',
+      confirmButtonColor:'#79131D',confirmButtonText:'เปิดรายงาน'})
+    .then(r=>{ if(r.isConfirmed) window.open(`export.php?type=pdf&year_id=${y}`,'_blank'); });
+  }
 }
 async function loadSummary(){
   $('#sList').innerHTML = skTable();
@@ -467,7 +504,36 @@ function pageProfile(){
          <input name="password" type="password" class="mt-1 w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none"></div>
      </div>
      <button class="px-6 py-3 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white font-semibold shadow-lg shadow-primary/25"><i class="fa-solid fa-floppy-disk"></i> บันทึกการแก้ไข</button>
-   </form>`;
+   </form><div id="lineBox"></div>`;   loadLineBox();
+}
+async function loadLineBox(){
+  const r = await api('line_status',null,true);
+  $('#lineBox').innerHTML = `
+   <div class="bg-white rounded-2xl p-6 shadow-sm ring-1 ring-black/5 max-w-2xl mt-5 fade">
+     <div class="flex items-center gap-3 mb-4">
+       <div class="w-11 h-11 rounded-xl bg-[#06C755]/15 text-[#06C755] flex items-center justify-center"><i class="fa-brands fa-line text-xl"></i></div>
+       <div class="flex-1"><h3 class="font-bold text-gray-800">แจ้งเตือนผ่าน LINE</h3>
+         <p class="text-xs text-gray-400">รับแจ้งเตือนผลการตรวจเอกสารทันที</p></div>
+       ${r.linked?'<span class="px-3 py-1 rounded-full text-xs font-semibold bg-[#26A69A]/15 text-[#26A69A]"><i class="fa-solid fa-circle-check"></i> เชื่อมต่อแล้ว</span>'
+                 :'<span class="px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-500">ยังไม่เชื่อมต่อ</span>'}
+     </div>
+     ${r.linked
+       ? `<button onclick="unlinkLine()" class="px-5 py-2.5 rounded-xl bg-[#EF5350]/10 text-[#D32F2F] text-sm font-medium hover:bg-[#EF5350] hover:text-white transition"><i class="fa-solid fa-link-slash"></i> ยกเลิกการเชื่อมต่อ</button>`
+       : `<button onclick="genCode()" class="px-5 py-2.5 rounded-xl bg-[#06C755] text-white text-sm font-semibold shadow-lg shadow-[#06C755]/25"><i class="fa-solid fa-qrcode"></i> ขอรหัสเชื่อมต่อ</button>`}
+   </div>`;
+}
+async function genCode(){
+  const r = await api('line_code');
+  Swal.fire({title:'รหัสเชื่อมต่อของคุณ',
+    html:`<div style="font-size:42px;font-weight:800;letter-spacing:8px;color:#79131D;margin:12px 0">${r.code}</div>
+          <p style="font-size:14px;color:#666">1. เพิ่มเพื่อน LINE OA ของโรงเรียน<br>2. พิมพ์รหัสนี้ส่งเข้าแชท<br>3. ระบบจะเชื่อมต่อให้อัตโนมัติ</p>`,
+    confirmButtonColor:'#06C755',confirmButtonText:'เข้าใจแล้ว'}).then(loadLineBox);
+}
+function unlinkLine(){
+  Swal.fire({title:'ยกเลิกการเชื่อมต่อ?',text:'คุณจะไม่ได้รับการแจ้งเตือนผ่าน LINE อีก',icon:'warning',
+    showCancelButton:true,confirmButtonColor:'#D32F2F',confirmButtonText:'ยกเลิกการเชื่อมต่อ',cancelButtonText:'ไม่'})
+  .then(async x=>{ if(x.isConfirmed){ await api('line_unlink'); toast('success','ยกเลิกแล้ว'); loadLineBox(); }});
+}
   $('#fP').onsubmit = async e=>{ e.preventDefault();
     const r = await api('profile_save', new FormData(e.target));
     if(r.ok){ Object.assign(ME,r.user); $('#sbName').textContent=r.user.fullname;
@@ -596,7 +662,79 @@ async function reviewChange(sel,id,type){
   }
   pageReview(type);
 }
+/* ================= ตั้งค่า LINE ================= */
+async function pageLine(){
+  $('#content').innerHTML = skTable();
+  const r = await api('line_get',null,true);
+  const base = location.href.replace(/app\.php.*$/,'');
+  $('#content').innerHTML = `
+   <div class="grid lg:grid-cols-3 gap-5 fade">
+    <div class="lg:col-span-2 space-y-5">
+      <form id="fL" class="bg-white rounded-2xl p-6 shadow-sm ring-1 ring-black/5 space-y-5">
+        <div class="flex items-center gap-3">
+          <div class="w-12 h-12 rounded-xl bg-[#06C755]/15 text-[#06C755] flex items-center justify-center"><i class="fa-brands fa-line text-2xl"></i></div>
+          <div><h3 class="font-bold text-gray-800">LINE Messaging API</h3>
+          <p class="text-xs text-gray-400">ใช้แทน LINE Notify ที่ปิดบริการแล้ว</p></div>
+        </div>
+        <label class="flex items-center justify-between p-4 rounded-xl bg-gray-50 cursor-pointer">
+          <span class="text-sm font-medium text-gray-700">เปิดใช้งานการแจ้งเตือน</span>
+          <input type="checkbox" name="enable" value="1" ${r.enable==='1'?'checked':''} class="w-5 h-5 accent-[#06C755]">
+        </label>
+        <div><label class="text-sm font-medium text-gray-600">Channel Access Token (Long-lived)</label>
+          <textarea name="token" rows="4" placeholder="วาง Token จาก LINE Developers Console"
+            class="mt-1 w-full px-4 py-3 rounded-xl border border-gray-200 bg-gray-50 focus:bg-white focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none text-xs font-mono break-all">${esc(r.token)}</textarea></div>
+        <div><label class="text-sm font-medium text-gray-600">Webhook URL <span class="text-xs text-gray-400">(นำไปใส่ใน LINE Console)</span></label>
+          <div class="mt-1 flex gap-2">
+            <input id="wh" readonly value="${base}webhook.php" class="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-gray-100 text-xs font-mono">
+            <button type="button" onclick="navigator.clipboard.writeText($('#wh').value);toast('success','คัดลอกแล้ว')" class="px-4 rounded-xl bg-primary/10 text-primary"><i class="fa-solid fa-copy"></i></button>
+          </div></div>
+        <div class="flex gap-2">
+          <button class="px-6 py-3 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white font-semibold"><i class="fa-solid fa-floppy-disk"></i> บันทึก</button>
+          <button type="button" onclick="testLine()" class="px-6 py-3 rounded-xl bg-[#06C755] text-white font-semibold"><i class="fa-solid fa-paper-plane"></i> ทดสอบส่ง</button>
+        </div>
+      </form>
 
+      <div class="bg-white rounded-2xl shadow-sm ring-1 ring-black/5 overflow-hidden">
+        <div class="px-5 py-4 border-b border-gray-100"><h3 class="font-semibold text-gray-700"><i class="fa-solid fa-clock-rotate-left text-primary"></i> ประวัติการแจ้งเตือนล่าสุด</h3></div>
+        <div class="overflow-x-auto max-h-80"><table class="w-full text-sm min-w-[540px]">
+         <tbody class="divide-y divide-gray-100">
+          ${r.log.length?r.log.map(l=>`<tr class="hover:bg-gray-50">
+            <td class="px-4 py-3 text-gray-600 w-40">${esc(l.fullname||'-')}</td>
+            <td class="px-4 py-3 text-xs text-gray-400">${esc(l.created_at)}</td>
+            <td class="px-4 py-3 text-right"><span class="px-3 py-1 rounded-full text-xs font-semibold ${l.status==='สำเร็จ'?'bg-[#26A69A]/15 text-[#26A69A]':'bg-[#EF5350]/15 text-[#D32F2F]'}">${esc(l.status)}</span></td>
+          </tr>`).join('')
+          :'<tr><td class="py-12 text-center text-gray-400">ยังไม่มีประวัติ</td></tr>'}
+         </tbody></table></div>
+      </div>
+    </div>
+
+    <div class="space-y-4">
+      ${card('ผูกบัญชี LINE แล้ว', r.linked+' / '+r.total, 'fa-link','#06C755')}
+      <div class="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-black/5 text-sm text-gray-600 space-y-3">
+        <h4 class="font-bold text-gray-800">📌 ขั้นตอนตั้งค่า</h4>
+        <ol class="list-decimal ml-4 space-y-1.5 text-xs leading-relaxed">
+          <li>สมัคร <b>LINE Developers Console</b> → สร้าง Provider</li>
+          <li>สร้าง Channel ประเภท <b>Messaging API</b></li>
+          <li>แท็บ Messaging API → Issue <b>Channel Access Token</b> → คัดลอกมาวางด้านซ้าย</li>
+          <li>ใส่ <b>Webhook URL</b> ด้านซ้าย → เปิด Use webhook</li>
+          <li>ปิด <b>Auto-reply messages</b> และ Greeting messages</li>
+          <li>ให้ทุกคนสแกน QR เพิ่มเพื่อน OA แล้วผูกบัญชีที่เมนู "ข้อมูลส่วนตัว"</li>
+        </ol>
+        <p class="text-[11px] text-[#F57C00] bg-[#FFCA28]/15 p-2.5 rounded-lg">⚠️ Webhook ต้องเป็น HTTPS เท่านั้น หากทดสอบในเครื่องให้ใช้ ngrok</p>
+      </div>
+    </div>
+   </div>`;
+  $('#fL').onsubmit = async e=>{ e.preventDefault();
+    const fd = new FormData(e.target);
+    if(!fd.get('enable')) fd.set('enable','0');
+    const x = await api('line_save', fd);
+    x.ok ? toast('success','บันทึกการตั้งค่าแล้ว') : toast('error',x.msg); };
+}
+async function testLine(){
+  const r = await api('line_test');
+  r.ok ? Swal.fire({icon:'success',title:'ส่งสำเร็จ',text:'กรุณาตรวจสอบข้อความใน LINE',confirmButtonColor:'#79131D'})
+       : Swal.fire({icon:'error',title:'ส่งไม่สำเร็จ',text:r.msg,confirmButtonColor:'#79131D'});
+}
 /* ================= INIT ================= */
 buildMenu(); route();
 </script>

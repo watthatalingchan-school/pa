@@ -1,5 +1,6 @@
 <?php
 require 'config.php';
+require 'lib_notify.php';
 $act = $_REQUEST['act'] ?? '';
 
 /* ---------- LOGIN ---------- */
@@ -163,6 +164,9 @@ case 'sub_save':
     $pdo->prepare("INSERT INTO submissions(user_id,year_id,doc_type,file_path,link_url) VALUES(?,?,?,?,?)")
         ->execute([$U['id'],$y,$t,$f,$link?:null]);
   }
+    // ── แจ้งเตือนผู้อำนวยการ ──
+  $ynm = $pdo->query("SELECT year_name FROM fiscal_years WHERE id=$y")->fetch()['year_name'] ?? '';
+  notifyDirectors(msgSubmit($U['fullname'], ROLE_TH[$U['role']], TYPE_TH[$t], $ynm));
   ok();
 
 case 'sub_delete':
@@ -185,11 +189,20 @@ case 'review_list':
 
 case 'review_save':
   only('director');
-  $s=$_POST['status']; $rs=trim($_POST['reason']??'');
+  $id=(int)$_POST['id']; $s=$_POST['status']; $rs=trim($_POST['reason']??'');
   if(!in_array($s,['pending','approved','rejected'])) fail('สถานะไม่ถูกต้อง');
   if($s==='rejected' && $rs==='') fail('กรุณาระบุเหตุผลที่ไม่ผ่าน');
+
   $pdo->prepare("UPDATE submissions SET status=?, reason=? WHERE id=?")
-      ->execute([$s, $s==='rejected'?$rs:null, (int)$_POST['id']]);
+      ->execute([$s, $s==='rejected'?$rs:null, $id]);
+
+  // ── แจ้งเตือนเจ้าของงาน ──
+  $q = $pdo->query("SELECT s.user_id, s.doc_type, u.fullname, f.year_name
+                    FROM submissions s
+                    JOIN users u ON u.id=s.user_id
+                    JOIN fiscal_years f ON f.id=s.year_id
+                    WHERE s.id=$id")->fetch();
+  if($q) notifyUser($q['user_id'], msgReview($q['fullname'], TYPE_TH[$q['doc_type']], $q['year_name'], $s, $rs));
   ok();
 
 /* ================= แดชบอร์ดผู้ใช้ ================= */
@@ -209,5 +222,38 @@ case 'dash_user':
     $extra['total_user']=(int)$pdo->query("SELECT COUNT(*) c FROM users WHERE role IN('deputy','teacher')")->fetch()['c'];
   }
   ok(['docs'=>$m,'year'=>$yr['year_name']??'-','extra'=>$extra]);
+  /* ================= ตั้งค่า LINE (admin) ================= */
+case 'line_get':
+  only('admin');
+  ok(['token'=>setting('line_token'),'enable'=>setting('line_enable'),
+      'log'=>$pdo->query("SELECT n.*,u.fullname FROM notify_log n LEFT JOIN users u ON u.id=n.user_id
+                          ORDER BY n.id DESC LIMIT 20")->fetchAll(),
+      'linked'=>(int)$pdo->query("SELECT COUNT(*) c FROM users WHERE line_user_id IS NOT NULL")->fetch()['c'],
+      'total'=>(int)$pdo->query("SELECT COUNT(*) c FROM users WHERE role<>'admin'")->fetch()['c']]);
+
+case 'line_save':
+  only('admin');
+  setSetting('line_token', trim($_POST['token']??''));
+  setSetting('line_enable', ($_POST['enable']??'0')==='1'?'1':'0');
+  ok();
+
+case 'line_test':
+  only('admin');
+  $r = notifyUser($U['id'], "🧪 ทดสอบระบบแจ้งเตือน\n──────────────\nระบบส่งเอกสาร PA เชื่อมต่อ LINE สำเร็จ ✅\n🕐 ".date('d/m/Y H:i')." น.");
+  $r ? ok() : fail('ส่งไม่สำเร็จ — ตรวจสอบ Token หรือบัญชี admin ยังไม่ได้ผูก LINE');
+
+/* ================= ผูก/ยกเลิก LINE (ทุก role) ================= */
+case 'line_code':
+  $code = str_pad(random_int(0,999999),6,'0',STR_PAD_LEFT);
+  $pdo->prepare("UPDATE users SET line_link_code=? WHERE id=?")->execute([$code,$U['id']]);
+  ok(['code'=>$code]);
+
+case 'line_status':
+  $r = $pdo->query("SELECT line_user_id FROM users WHERE id=".(int)$U['id'])->fetch();
+  ok(['linked'=>!empty($r['line_user_id'])]);
+
+case 'line_unlink':
+  $pdo->prepare("UPDATE users SET line_user_id=NULL, line_link_code=NULL WHERE id=?")->execute([$U['id']]);
+  ok();
 }
 fail('ไม่พบคำสั่ง');
